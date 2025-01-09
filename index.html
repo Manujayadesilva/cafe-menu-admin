@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Cafe Management with Image Upload</title>
+  <style>
+    /* Very basic styling */
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    h2 {
+      margin-top: 40px;
+    }
+    table {
+      border-collapse: collapse;
+      margin-bottom: 15px;
+    }
+    table, th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+    }
+    form {
+      margin-bottom: 20px;
+    }
+    input[type="text"],
+    input[type="number"],
+    input[type="file"] {
+      margin-right: 10px;
+    }
+    label {
+      margin-right: 10px;
+    }
+    button {
+      margin-right: 10px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>Skinny Tom's Cafe — CRUD Frontend with Image Upload</h1>
+
+  <!-- =========================
+       CATEGORIES SECTION
+       ========================= -->
+  <section id="category-section">
+    <h2>Categories</h2>
+
+    <!-- (A) LIST OF CATEGORIES -->
+    <table id="category-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Name</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- Filled dynamically by JS -->
+      </tbody>
+    </table>
+
+    <!-- (B) CREATE/UPDATE FORM -->
+    <form id="category-form">
+      <label for="cat-id">ID (for update):</label>
+      <input type="text" id="cat-id" placeholder="Leave empty to create" />
+
+      <label for="cat-name">Name:</label>
+      <input type="text" id="cat-name" required placeholder="Coffee, Tea..." />
+
+      <button type="submit">Save Category</button>
+    </form>
+  </section>
+
+  <!-- =========================
+       MENU ITEMS SECTION
+       ========================= -->
+  <section id="menu-section">
+    <h2>Menu Items</h2>
+
+    <!-- (A) LIST OF MENU ITEMS -->
+    <table id="menu-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Ingredients</th>
+            <th>Price</th>
+            <th>Category ID</th>
+            <th>Available?</th>
+            <th>Image</th>  <!-- NEW COLUMN -->
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Filled dynamically by JS -->
+        </tbody>
+      </table>
+      
+
+    <!-- (B) CREATE/UPDATE FORM (with Image Upload) -->
+    <form id="menu-form">
+      <label for="menu-id">ID (update):</label>
+      <input type="text" id="menu-id" placeholder="Leave empty to create" />
+
+      <label for="menu-name">Name:</label>
+      <input type="text" id="menu-name" required placeholder="Latte, Espresso..." />
+
+      <label for="menu-ingredients">Ingredients:</label>
+      <input type="text" id="menu-ingredients" placeholder="Coffee, Milk..." />
+
+      <label for="menu-price">Price:</label>
+      <input type="number" step="0.01" id="menu-price" placeholder="0.00" />
+
+      <label for="menu-categoryId">Category ID:</label>
+      <input type="number" id="menu-categoryId" placeholder="1" />
+
+      <label for="menu-available">Available?</label>
+      <input type="checkbox" id="menu-available" checked />
+
+      <br /><br />
+      <label for="menu-image">Image:</label>
+      <input type="file" id="menu-image" accept="image/*" />
+
+      <button type="submit">Save Menu Item</button>
+    </form>
+  </section>
+
+  <!-- =========================
+       JAVASCRIPT
+       ========================= -->
+  <script>
+    const API_BASE = "http://localhost:8080/api"; // Adjust as needed
+
+    // ============================
+    // HELPER: READ FILE AS BASE64
+    // ============================
+    async function readFileAsBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          // e.target.result is a "data URL", e.g. "data:image/png;base64,iVBORw..."
+          // We can strip off the prefix "data:*/*;base64," if needed
+          const base64String = e.target.result.split(",")[1];
+          resolve(base64String);
+        };
+        reader.onerror = (err) => reject(err);
+        reader.readAsDataURL(file);
+      });
+    }
+
+    // =======================
+    // 1. CATEGORIES
+    // =======================
+
+    // 1A. Fetch & display categories
+    async function loadCategories() {
+      try {
+        const res = await fetch(`${API_BASE}/categories`);
+        const data = await res.json();
+
+        const tbody = document.querySelector("#category-table tbody");
+        tbody.innerHTML = "";
+
+        data.forEach(cat => {
+          const row = document.createElement("tr");
+          row.innerHTML = `
+            <td>${cat.id}</td>
+            <td>${cat.name}</td>
+            <td>
+              <button onclick="editCategory(${cat.id}, '${cat.name}')">Edit</button>
+              <button onclick="deleteCategory(${cat.id})">Delete</button>
+            </td>
+          `;
+          tbody.appendChild(row);
+        });
+      } catch (err) {
+        console.error("Error loading categories", err);
+      }
+    }
+
+    // 1B. Create/Update category
+    async function saveCategory(e) {
+      e.preventDefault();
+      const idInput = document.getElementById("cat-id");
+      const nameInput = document.getElementById("cat-name");
+
+      const catId = idInput.value.trim();
+      const catName = nameInput.value.trim();
+
+      if (!catName) {
+        alert("Category name is required!");
+        return;
+      }
+
+      const newCategory = {
+        ...(catId && { id: Number(catId) }),
+        name: catName
+      };
+
+      try {
+        if (catId) {
+          // Update
+          const res = await fetch(`${API_BASE}/categories/${catId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(newCategory)
+          });
+          if (!res.ok) throw new Error("Update category failed");
+        } else {
+          // Create
+          const res = await fetch(`${API_BASE}/categories`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(newCategory)
+          });
+          if (!res.ok) throw new Error("Create category failed");
+        }
+
+        // Clear form
+        idInput.value = "";
+        nameInput.value = "";
+        // Reload
+        loadCategories();
+      } catch (err) {
+        console.error("Error saving category", err);
+      }
+    }
+
+    // 1C. Fill form for editing
+    function editCategory(id, name) {
+      document.getElementById("cat-id").value = id;
+      document.getElementById("cat-name").value = name;
+    }
+
+    // 1D. Delete category
+    async function deleteCategory(id) {
+      if (!confirm("Are you sure you want to delete this category?")) return;
+      try {
+        const res = await fetch(`${API_BASE}/categories/${id}`, { method: "DELETE" });
+        if (!res.ok) throw new Error("Delete category failed");
+        loadCategories();
+      } catch (err) {
+        console.error("Error deleting category", err);
+      }
+    }
+
+    // =======================
+    // 2. MENU ITEMS
+    // =======================
+
+    // 2A. Fetch & display menu items
+    async function loadMenuItems() {
+  try {
+    const res = await fetch(`${API_BASE}/menuitems`);
+    const data = await res.json();
+
+    const tbody = document.querySelector("#menu-table tbody");
+    tbody.innerHTML = "";
+
+    data.forEach(item => {
+      const row = document.createElement("tr");
+
+      row.innerHTML = `
+        <td>${item.id}</td>
+        <td>${item.name}</td>
+        <td>${item.ingredients}</td>
+        <td>${item.price}</td>
+        <td>${item.categoryId}</td>
+        <td>
+          <input type="checkbox"
+            onchange="toggleAvailability(${item.id}, this.checked)"
+            ${item.available ? "checked" : ""}>
+        </td>
+        <td>
+          ${
+            item.image
+              // Display the base64 as a data URL
+              ? `<img src="data:image/png;base64,${item.image}"
+                       alt="${item.name}"
+                       style="max-width:100px; max-height:80px;" />`
+              : "No Image"
+          }
+        </td>
+        <td>
+          <button onclick="editMenuItem(
+            ${item.id},
+            '${item.name}',
+            '${item.ingredients}',
+            ${item.price},
+            ${item.categoryId},
+            ${item.available}
+          )">Edit</button>
+          <button onclick="deleteMenuItem(${item.id})">Delete</button>
+        </td>
+      `;
+
+      tbody.appendChild(row);
+    });
+  } catch (err) {
+    console.error("Error loading menu items", err);
+  }
+}
+
+
+    // 2B. Create/Update menu item (with image upload)
+    async function saveMenuItem(e) {
+      e.preventDefault();
+
+      const menuId = document.getElementById("menu-id").value.trim();
+      const menuName = document.getElementById("menu-name").value.trim();
+      const menuIngredients = document.getElementById("menu-ingredients").value.trim();
+      const menuPrice = document.getElementById("menu-price").value.trim();
+      const menuCategoryId = document.getElementById("menu-categoryId").value.trim();
+      const menuAvailable = document.getElementById("menu-available").checked;
+      const fileInput = document.getElementById("menu-image");
+
+      if (!menuName || !menuCategoryId) {
+        alert("Name and Category ID are required!");
+        return;
+      }
+
+      // Convert uploaded file to base64 if present
+      let base64Image = "";
+      const file = fileInput.files[0];
+      if (file) {
+        try {
+          base64Image = await readFileAsBase64(file);
+        } catch (err) {
+          console.error("Error reading image file", err);
+          return;
+        }
+      }
+
+      const newItem = {
+        // If updating, only pass ID if it’s not empty
+        ...(menuId && { id: Number(menuId) }),
+        name: menuName,
+        ingredients: menuIngredients,
+        price: parseFloat(menuPrice || "0"),
+        // The BASE64 string we got (or empty if no file chosen)
+        image: base64Image,
+        categoryId: Number(menuCategoryId),
+        available: menuAvailable
+      };
+
+      try {
+        if (menuId) {
+          // Update
+          const res = await fetch(`${API_BASE}/menuitems/${menuId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(newItem)
+          });
+          if (!res.ok) throw new Error("Update menu item failed");
+        } else {
+          // Create
+          const res = await fetch(`${API_BASE}/menuitems`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(newItem)
+          });
+          if (!res.ok) throw new Error("Create menu item failed");
+        }
+
+        // Clear form
+        document.getElementById("menu-form").reset();
+        // Reload
+        loadMenuItems();
+      } catch (err) {
+        console.error("Error saving menu item", err);
+      }
+    }
+
+    // 2C. Fill form for editing
+    function editMenuItem(id, name, ingredients, price, categoryId, available) {
+      document.getElementById("menu-id").value = id;
+      document.getElementById("menu-name").value = name;
+      document.getElementById("menu-ingredients").value = ingredients;
+      document.getElementById("menu-price").value = price;
+      document.getElementById("menu-categoryId").value = categoryId;
+      document.getElementById("menu-available").checked = available;
+
+      // Clear the file input because we don't have a stored file
+      document.getElementById("menu-image").value = "";
+    }
+
+    // 2D. Delete menu item
+    async function deleteMenuItem(id) {
+      if (!confirm("Are you sure you want to delete this menu item?")) return;
+      try {
+        const res = await fetch(`${API_BASE}/menuitems/${id}`, { method: "DELETE" });
+        if (!res.ok) throw new Error("Delete menu item failed");
+        loadMenuItems();
+      } catch (err) {
+        console.error("Error deleting menu item", err);
+      }
+    }
+
+    // 2E. Toggle availability
+    async function toggleAvailability(itemId, checked) {
+      try {
+        // Minimal partial update
+        const res = await fetch(`${API_BASE}/menuitems/${itemId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ available: checked })
+        });
+        if (!res.ok) throw new Error("Availability update failed");
+      } catch (err) {
+        console.error("Error toggling availability", err);
+      }
+    }
+
+    // =======================
+    // 3. ON PAGE LOAD
+    // =======================
+    document.addEventListener("DOMContentLoaded", () => {
+      // Categories
+      loadCategories();
+      document.getElementById("category-form").addEventListener("submit", saveCategory);
+
+      // Menu Items
+      loadMenuItems();
+      document.getElementById("menu-form").addEventListener("submit", saveMenuItem);
+    });
+  </script>
+</body>
+</html>
